@@ -27,4 +27,3 @@ include_directories(
 
 add_subdirectory(stages)
 add_subdirectory(src)
-add_subdirectory(test)
