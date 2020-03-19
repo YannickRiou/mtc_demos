@@ -136,6 +136,79 @@ void planTest(Task &t) {
 		t.add(std::move(stage));
 	}
 
+	{
+		// connect to pick
+		stages::Connect::GroupPlannerVector planners = {{"left_gripper", pipeline}, {"left_arm", pipeline}};
+		auto connect = std::make_unique<stages::Connect>("connect", planners);
+		connect->properties().configureInitFrom(Stage::PARENT);
+		t.add(std::move(connect));
+	}
+
+	{
+		// grasp generator
+		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose left");
+		grasp_generator->setAngleDelta(.2);
+		grasp_generator->setPreGraspPose("left_open");
+		grasp_generator->setGraspPose("left_close");
+		grasp_generator->setProperty("object", std::string("object"));
+		grasp_generator->setMonitoredStage(current_state);
+		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
+		Eigen::Affine3d tr = Eigen::Affine3d::Identity();
+		tr.translation() = Eigen::Vector3d(0.0,0.0,-0.1);
+		grasp->setIKFrame(tr, "l_gripper_tool_frame");
+		grasp->setMaxIKSolutions(10);
+
+		// pick container, using the generated grasp generator
+		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
+		pick->setProperty("eef", "left_gripper");
+		pick->setProperty("group","left_arm");
+		pick->setProperty("object", std::string("object"));
+		geometry_msgs::TwistStamped approach;
+		approach.header.frame_id = "l_gripper_tool_frame";
+		approach.twist.linear.x = 1.0;
+		pick->setApproachMotion(approach, 0.01, 0.10);
+
+		geometry_msgs::TwistStamped lift;
+		lift.header.frame_id = "base_footprint";
+		lift.twist.linear.x =  0.0;
+		lift.twist.linear.y =  0.0;
+		lift.twist.linear.z =  0.0;
+		pick->setLiftMotion(lift, 0.00, 0.00);
+
+		t.add(std::move(pick));
+	}
+
+	auto merger = std::make_unique<Merger>();
+	{
+		auto stage = std::make_unique<stages::MoveRelative>("move object up left", cartesian);
+		stage->properties().set("link", "l_gripper_tool_frame");
+		stage->setProperty("group","left_arm");
+		stage->setMinMaxDistance(.03, .13);
+		// Set downward direction
+		geometry_msgs::Vector3Stamped vec;
+		vec.header.frame_id = "base_footprint";
+		vec.vector.z = 1.0;
+		stage->setDirection(vec);
+		stage->restrictDirection(PropagatingEitherWay::FORWARD);
+		merger->insert(std::move(stage));
+	}
+
+	{
+		auto stage = std::make_unique<stages::MoveRelative>("move object up right", cartesian);
+		stage->properties().set("link", "r_gripper_tool_frame");
+		stage->setProperty("group","right_arm");
+		stage->setMinMaxDistance(.03, .13);
+		// Set downward direction
+		geometry_msgs::Vector3Stamped vec;
+		vec.header.frame_id = "base_footprint";
+		vec.vector.z = 1.0;
+		stage->setDirection(vec);
+		stage->restrictDirection(PropagatingEitherWay::FORWARD);
+
+		merger->insert(std::move(stage));
+	}
+
+	t.add(std::move(merger));
 
 /* 	{
 			auto stage = std::make_unique<stages::MoveRelative>("lower object", cartesian);

@@ -36,19 +36,18 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	o.id= "object";
 	o.header.frame_id= "base_footprint";
 	o.primitive_poses.resize(1);
-	o.primitive_poses[0].position.x = 0.6;
-	o.primitive_poses[0].position.y = 0.0;
-	o.primitive_poses[0].position.z = 0.75+(0.50/2);
+	o.primitive_poses[0].position.x = 0.53;
+	o.primitive_poses[0].position.y = -0.1;
+	o.primitive_poses[0].position.z = 0.75+(0.23/2);
 	o.primitive_poses[0].orientation.x =0.0;
 	o.primitive_poses[0].orientation.y =0.0;
 	o.primitive_poses[0].orientation.z =0.0;
 	o.primitive_poses[0].orientation.w =1.0;
 	o.primitives.resize(1);
-	o.primitives[0].type= shape_msgs::SolidPrimitive::BOX;
-	o.primitives[0].dimensions.resize(3);
-	o.primitives[0].dimensions[0]= 0.05;
-	o.primitives[0].dimensions[1]= 0.05;
-	o.primitives[0].dimensions[2]= 0.50;
+	o.primitives[0].type= shape_msgs::SolidPrimitive::CYLINDER;
+	o.primitives[0].dimensions.resize(2);
+	o.primitives[0].dimensions[0]= 0.23;
+	o.primitives[0].dimensions[1]= 0.03;
 	psi.applyCollisionObject(o);
 
 	moveit_msgs::CollisionObject table;
@@ -71,6 +70,64 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	psi.applyCollisionObject(table);
 }
 
+/*void planPick(Task &t) {
+	spawnObject();
+
+	t.loadRobotModel();
+
+	std::string side = "left";
+	std::string tool_frame = side.substr(0,1) + "_gripper_tool_frame";
+	std::string eef = side + "_gripper";
+	std::string arm = side + "_arm";
+
+	Stage* initial_stage = nullptr;
+	auto initial = std::make_unique<stages::CurrentState>("current state");
+	initial_stage = initial.get();
+	t.add(std::move(initial));
+
+	// planner used for connect
+	auto pipeline = std::make_shared<solvers::PipelinePlanner>();
+	pipeline->setPlannerId("RRTConnectkConfigDefault");
+
+	{
+		// connect to pick
+		stages::Connect::GroupPlannerVector planners = {{eef, pipeline}, {arm, pipeline}};
+		auto connect = std::make_unique<stages::Connect>("connect", planners);
+		connect->properties().configureInitFrom(Stage::PARENT);
+		t.add(std::move(connect));
+  }
+	{
+		// grasp generator
+		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose");
+		//grasp_generator->setAngleDelta(M_PI / 12);
+		grasp_generator->setPreGraspPose(side + "_open");
+		grasp_generator->setGraspPose(side +"_close");
+		grasp_generator->setMonitoredStage(initial_stage);
+
+		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
+		grasp->setIKFrame(Eigen::Affine3d::Identity(), tool_frame);
+
+
+		// pick container, using the generated grasp generator
+		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
+		pick->setProperty("eef", eef);
+		pick->setProperty("object", std::string("object"));
+		geometry_msgs::TwistStamped approach;
+		approach.header.frame_id = "object";
+		approach.twist.linear.x = -1.0;
+		pick->setApproachMotion(approach, 0.03, 0.1);
+
+		geometry_msgs::TwistStamped lift;
+		lift.header.frame_id = "base_footprint";
+		lift.twist.linear.z = 1.0;
+		pick->setLiftMotion(lift, 0.03, 0.05);
+
+		t.add(std::move(pick));
+	}
+
+	//t.plan();
+}*/
+
 void planTest(Task &t) {
 
 	t.loadRobotModel();
@@ -87,56 +144,88 @@ void planTest(Task &t) {
 	auto pipeline = std::make_shared<solvers::PipelinePlanner>();
 	pipeline->setPlannerId("RRTConnectkConfigDefault");
 
-	{
-		// connect to pick
-		stages::Connect::GroupPlannerVector planners = {{"right_gripper", pipeline}, {"right_arm", pipeline}};
-		auto connect = std::make_unique<stages::Connect>("connect", planners);
-		connect->properties().configureInitFrom(Stage::PARENT);
-		t.add(std::move(connect));
-	}
+	auto parallel = std::make_unique<Alternatives>();
 
 	{
 		// grasp generator
-		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose right");
-		grasp_generator->setAngleDelta(.2);
-		grasp_generator->setPreGraspPose("right_open");
-		grasp_generator->setGraspPose("right_close");
-		grasp_generator->setProperty("object", std::string("object"));
+		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose left");
+		grasp_generator->setTopGraspEnable(true);
+		grasp_generator->setAngleDelta(M_PI/2);
+		grasp_generator->setPreGraspPose("left_open");
+		grasp_generator->setGraspPose("left_close");
 		grasp_generator->setMonitoredStage(current_state);
+
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		Eigen::Affine3d tr = Eigen::Affine3d::Identity();
-		tr.translation() = Eigen::Vector3d(0.0,0.0,0.1);
-		grasp->setIKFrame(tr, "r_gripper_tool_frame");
+		grasp->setIKFrame("l_gripper_tool_frame");
 		grasp->setMaxIKSolutions(10);
+
 
 		// pick container, using the generated grasp generator
 		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
-		pick->setProperty("eef", "right_gripper");
-		pick->setProperty("group","right_arm");
-		pick->setProperty("object", std::string("object"));
+		pick->properties().configureInitFrom(Stage::PARENT);
+		pick->setProperty("eef","left_gripper");
+		pick->setProperty("object","object");
 		geometry_msgs::TwistStamped approach;
-		approach.header.frame_id = "r_gripper_tool_frame";
+		approach.header.frame_id = "l_wrist_roll_link";
 		approach.twist.linear.x = 1.0;
 		pick->setApproachMotion(approach, 0.01, 0.10);
 
 		geometry_msgs::TwistStamped lift;
 		lift.header.frame_id = "base_footprint";
-		lift.twist.linear.x =  0.0;
-		lift.twist.linear.y =  0.0;
-		lift.twist.linear.z =  0.0;
-		pick->setLiftMotion(lift, 0.00, 0.00);
-		current_state = pick.get();
-		t.add(std::move(pick));
+		lift.twist.linear.z =  1.0;
+		pick->setLiftMotion(lift, 0.01, 0.20);
+
+		// connect to pick
+		stages::Connect::GroupPlannerVector planners = {{("left_gripper"), pipeline}, {"left_arm", pipeline}};
+		auto connect = std::make_unique<stages::Connect>("connect", planners);
+		connect->properties().configureInitFrom(Stage::PARENT);
+		pick->insert(std::move(connect),0);
+
+		parallel->insert(std::move(pick));
 	}
 
 	{
-		auto stage = std::make_unique<stages::ModifyPlanningScene>("Detach object");
-		stage->detachObject("object", "r_gripper_tool_frame");
-		current_state = stage.get();
-		t.add(std::move(stage));
+		// grasp generator
+		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose right");
+		grasp_generator->setTopGraspEnable(true);
+		grasp_generator->setAngleDelta(M_PI/2);
+		grasp_generator->setProperty("group","right_arm");
+		grasp_generator->setProperty("eef","right_gripper");
+		grasp_generator->setPreGraspPose("right_open");
+		grasp_generator->setGraspPose("right_close");
+		grasp_generator->setMonitoredStage(current_state);
+
+		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
+		grasp->setIKFrame("r_gripper_tool_frame");
+		grasp->properties().configureInitFrom(Stage::PARENT);
+		grasp->setProperty("group","right_arm");
+		grasp->setMaxIKSolutions(10);
+
+
+		// pick container, using the generated grasp generator
+		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
+		pick->properties().configureInitFrom(Stage::PARENT);
+		pick->setProperty("group","right_arm");
+		pick->setProperty("eef","right_gripper");
+		pick->setProperty("object","object");
+		geometry_msgs::TwistStamped approach;
+		approach.header.frame_id = "r_wrist_roll_link";
+		approach.twist.linear.x = 1.0;
+		pick->setApproachMotion(approach, 0.01, 0.10);
+
+		geometry_msgs::TwistStamped lift;
+		lift.header.frame_id = "base_footprint";
+		lift.twist.linear.z =  1.0;
+		pick->setLiftMotion(lift, 0.01, 0.20);
+		// connect to pick
+		stages::Connect::GroupPlannerVector planners = {{("right_gripper"), pipeline}, {"right_arm", pipeline}};
+		auto connect = std::make_unique<stages::Connect>("connect", planners);
+		connect->properties().configureInitFrom(Stage::PARENT);
+		pick->insert(std::move(connect),0);
+		parallel->insert(std::move(pick));
 	}
 
-
+	t.add(std::move(parallel));
 /* 	{
 			auto stage = std::make_unique<stages::MoveRelative>("lower object", cartesian);
 			stage->properties().set("marker_ns", "lower_object");
@@ -394,7 +483,7 @@ int main(int argc, char** argv){
 	ros::Duration(5).sleep();
 	marker_sub.shutdown();
 
-	Task t("myTask");
+	Task t("left");
 	try {
 		planTest(t);
 

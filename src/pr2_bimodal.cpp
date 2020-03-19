@@ -13,8 +13,6 @@
 #include <shape_msgs/SolidPrimitive.h>
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <gtest/gtest.h>
-#include "test_utils.h"
 
 using namespace moveit::task_constructor;
 bool do_pause = false;
@@ -80,7 +78,7 @@ void fill(ParallelContainerBase &container, Stage* initial_stage, bool right_sid
 	container.insert(std::move(pick));
 }
 
-TEST(PR2, bimodal) {
+void test() {
 	Task t;
 
 	Stage* initial_stage = nullptr;
@@ -98,13 +96,11 @@ TEST(PR2, bimodal) {
 	size_t successes = 0;
 	size_t solutions = 0;
 	for (double pos = -0.8; pos <= 0.801; pos += 0.2) {
-		SCOPED_TRACE("object at pos=" + std::to_string(pos));
 
 		spawnObject(pos);
 		try {
 			t.plan();
 		} catch (const InitStageException &e) {
-			ADD_FAILURE() << "planning failed with exception" << std::endl << e << t;
 		}
 
 		auto num = t.solutions().size();
@@ -115,22 +111,15 @@ TEST(PR2, bimodal) {
 			++successes;
 			solutions += num;
 
-			EXPECT_GE(num, 1u);
-			EXPECT_LE(num, 20u);
 		}
 	}
-	EXPECT_LE((double)failures / (successes + failures), 0.2) << "failure rate too high";
-	EXPECT_GE((double)solutions / successes, 5) << "avg number of solutions too small";
 
-	if (do_pause) waitForKey();
 }
 
 int main(int argc, char** argv){
-	testing::InitGoogleTest(&argc, argv);
 	ros::init(argc, argv, "pr2");
 	ros::AsyncSpinner spinner(1);
 	spinner.start();
 
-	do_pause = doPause(argc, argv);
-	return RUN_ALL_TESTS();
+	return 0;
 }

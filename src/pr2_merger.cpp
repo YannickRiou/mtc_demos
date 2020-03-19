@@ -87,55 +87,41 @@ void planTest(Task &t) {
 	auto pipeline = std::make_shared<solvers::PipelinePlanner>();
 	pipeline->setPlannerId("RRTConnectkConfigDefault");
 
-	{
-		// connect to pick
-		stages::Connect::GroupPlannerVector planners = {{"right_gripper", pipeline}, {"right_arm", pipeline}};
-		auto connect = std::make_unique<stages::Connect>("connect", planners);
-		connect->properties().configureInitFrom(Stage::PARENT);
-		t.add(std::move(connect));
-	}
+	auto merger = std::make_unique<Merger>();
 
 	{
-		// grasp generator
-		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose right");
-		grasp_generator->setAngleDelta(.2);
-		grasp_generator->setPreGraspPose("right_open");
-		grasp_generator->setGraspPose("right_close");
-		grasp_generator->setProperty("object", std::string("object"));
-		grasp_generator->setMonitoredStage(current_state);
-		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		Eigen::Affine3d tr = Eigen::Affine3d::Identity();
-		tr.translation() = Eigen::Vector3d(0.0,0.0,0.1);
-		grasp->setIKFrame(tr, "r_gripper_tool_frame");
-		grasp->setMaxIKSolutions(10);
-
-		// pick container, using the generated grasp generator
-		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
-		pick->setProperty("eef", "right_gripper");
-		pick->setProperty("group","right_arm");
-		pick->setProperty("object", std::string("object"));
-		geometry_msgs::TwistStamped approach;
-		approach.header.frame_id = "r_gripper_tool_frame";
-		approach.twist.linear.x = 1.0;
-		pick->setApproachMotion(approach, 0.01, 0.10);
-
-		geometry_msgs::TwistStamped lift;
-		lift.header.frame_id = "base_footprint";
-		lift.twist.linear.x =  0.0;
-		lift.twist.linear.y =  0.0;
-		lift.twist.linear.z =  0.0;
-		pick->setLiftMotion(lift, 0.00, 0.00);
-		current_state = pick.get();
-		t.add(std::move(pick));
+			auto stage = std::make_unique<stages::MoveRelative>("lower object left", cartesian);
+			stage->properties().set("marker_ns", "lower_object");
+			stage->properties().set("link", "l_gripper_tool_frame");
+			stage->properties().set("group","left_arm");
+			stage->setMinMaxDistance(.03, .13);
+			// Set downward direction
+			geometry_msgs::Vector3Stamped vec;
+			vec.header.frame_id = "base_footprint";
+			vec.vector.z = -1.0;
+			stage->setDirection(vec);
+			stage->restrictDirection(PropagatingEitherWay::FORWARD);
+		  merger->insert(std::move(stage));
 	}
+
 
 	{
-		auto stage = std::make_unique<stages::ModifyPlanningScene>("Detach object");
-		stage->detachObject("object", "r_gripper_tool_frame");
-		current_state = stage.get();
-		t.add(std::move(stage));
+			auto stage = std::make_unique<stages::MoveRelative>("lower object right", cartesian);
+			stage->properties().set("marker_ns", "lower_object");
+			stage->properties().set("link", "r_gripper_tool_frame");
+			stage->properties().set("group","right_arm");
+			stage->setMinMaxDistance(.03, .13);
+			// Set downward direction
+			geometry_msgs::Vector3Stamped vec;
+			vec.header.frame_id = "base_footprint";
+			vec.vector.z = -1.0;
+			stage->setDirection(vec);
+			stage->restrictDirection(PropagatingEitherWay::FORWARD);
+		  merger->insert(std::move(stage));
 	}
 
+
+	t.add(std::move(merger));
 
 /* 	{
 			auto stage = std::make_unique<stages::MoveRelative>("lower object", cartesian);
@@ -394,7 +380,7 @@ int main(int argc, char** argv){
 	ros::Duration(5).sleep();
 	marker_sub.shutdown();
 
-	Task t("myTask");
+	Task t("left");
 	try {
 		planTest(t);
 
