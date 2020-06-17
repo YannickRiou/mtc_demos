@@ -36,12 +36,12 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	o.id= "object";
 	o.header.frame_id= "base_footprint";
 	o.primitive_poses.resize(1);
-	o.primitive_poses[0].position.x = 0.53;
+	o.primitive_poses[0].position.x = 0.65;
 	o.primitive_poses[0].position.y = 0.05;
-	o.primitive_poses[0].position.z = 0.75+(0.23/2);
+	o.primitive_poses[0].position.z = 0.75+(0.23/2)+0.02;
 	o.primitive_poses[0].orientation.x =0.0;
 	o.primitive_poses[0].orientation.y =0.0;
-	o.primitive_poses[0].orientation.z =0.0;
+	o.primitive_poses[0].orientation.z =0.00;
 	o.primitive_poses[0].orientation.w =1.0;
 	o.primitives.resize(1);
 	o.primitives[0].type= shape_msgs::SolidPrimitive::CYLINDER;
@@ -160,7 +160,7 @@ void planTest(Task &t) {
 	{
 		// grasp generator
 		auto grasp_generator = std::make_unique<stages::GenerateGraspPose>("generate grasp pose left");
-		grasp_generator->setTopGraspEnable(true);
+		//grasp_generator->setTopGraspEnable(true);
 		grasp_generator->setAngleDelta(M_PI/4);
 		grasp_generator->setPreGraspPose("left_open");
 		grasp_generator->setGraspPose("left_close");
@@ -214,9 +214,9 @@ void planTest(Task &t) {
 		auto stage = std::make_unique<stages::GeneratePlacePose>("place pose");
 		geometry_msgs::PoseStamped p;
 		p.header.frame_id= "base_footprint";
-		p.pose.position.x=  0.53;
-		p.pose.position.y=  -0.1;
-		p.pose.position.z=  0.75+(0.23/2)+0.05;
+		p.pose.position.x=  0.60;
+		p.pose.position.y=  -0.25;
+		p.pose.position.z=  0.75+(0.23/2)+0.01;
 		stage->setPose(p);
 		stage->setObject("object");
 		stage->setProperty("eef", "left_gripper");
