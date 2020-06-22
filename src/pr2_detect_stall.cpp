@@ -15,7 +15,7 @@
 #include <moveit/task_constructor/stages/modify_planning_scene.h>
 #include <moveit/task_constructor/stages/compute_ik.h>
 
-
+#include <cmath>        // std::abs
 
 #include <moveit_task_constructor_msgs/ExecuteTaskSolutionAction.h>
 
@@ -248,26 +248,39 @@ void execute(Task &t)
 
 }
 
+float prev_joint_value = 0.0;
+
 void actualJointStateCallback(const sensor_msgs::JointStateConstPtr& msg)
 {
-	int i=0;
-	while(msg->name[i] != "l_gripper_joint")
+	float error = 0.0;
+	for(int i = 0; i < msg->name.size(); i++)
 	{
-		i++;
+		if(msg->name[i] == "l_forearm_roll_joint")
+		{
+			std::cout << "l_forearm_roll_joint position :" << msg->position[i] << std::endl;
+			std::cout << "l_forearm_roll_joint timestamp :" << msg->header.stamp.sec << std::endl;
+
+			error = (msg->position[i] - prev_joint_value);
+			prev_joint_value = msg->position[i];
+			 std::cout << std::fixed << std::setprecision(6) << "Previous  :" << prev_joint_value << std::endl;
+
+		  std::cout << std::fixed << std::setprecision(6) << "ERROR  :" << error << std::endl;
+		}
 	}
-	std::cout << "l_gripper_joint position :" << msg->position[i] << std::endl;
-	std::cout << "l_gripper_joint timestamp :" << msg->header.stamp.sec << std::endl;
+
 }
 
 void motionPlanRequestCallback(const moveit_msgs::MotionPlanRequestConstPtr& msg)
 {
-	int i=0;
-	while(msg->goal_constraints[0].joint_constraints[i].joint_name != "l_gripper_joint")
+
+	for(int i=0; i < msg->goal_constraints.size(); i++)
 	{
-		i++;
+		if (msg->goal_constraints[0].joint_constraints[i].joint_name == "l_gripper_joint")
+		{
+		std::cout << "l_gripper_joint position wanted :" << msg->goal_constraints[0].joint_constraints[i].position << std::endl;
+		std::cout << "l_gripper_joint position wanted timestamp :" << msg->workspace_parameters.header.stamp.sec << std::endl;
+	  }
 	}
-	std::cout << "l_gripper_joint position wanted :" << msg->goal_constraints[0].joint_constraints[i].position << std::endl;
-	std::cout << "l_gripper_joint position wanted timestamp :" << msg->workspace_parameters.header.stamp.sec << std::endl;
 }
 
 
@@ -286,7 +299,7 @@ int main(int argc, char** argv)
 
 	ros::Subscriber sub2 = nh.subscribe("/move_group/motion_plan_request", 1000, motionPlanRequestCallback);
 
-	const std::string RIGHT_ARM_PLANNING_GROUP = "right_arm";
+	/*const std::string RIGHT_ARM_PLANNING_GROUP = "right_arm";
 	const std::string	LEFT_ARM_PLANNING_GROUP = "left_arm";
 
 	const robot_state::JointModelGroup* right_arm_joint_model_group;
@@ -302,11 +315,11 @@ int main(int argc, char** argv)
 
 	// Set Arm to initial pose
 	right_arm_move_group.setNamedTarget("RIGHT_ARM_INITIAL_POSE");
-	left_arm_move_group.setNamedTarget("LEFT_ARM_INITIAL_POSE");
+	left_arm_move_group.setNamedTarget("LEFT_ARM_INITIAL_POSE");*/
 
 	// Move the arms to initial pose (away from robot vision)
-	right_arm_move_group.move();
-	left_arm_move_group.move();
+	//right_arm_move_group.move();
+	//left_arm_move_group.move();
 
 	// Store the planning scene where the collision object will be add
 	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;

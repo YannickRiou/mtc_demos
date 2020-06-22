@@ -29,3 +29,13 @@ target_link_libraries(pr2_cartesian ${catkin_LIBRARIES})
 
 add_executable(pr2_detect_stall pr2_detect_stall.cpp)
 target_link_libraries(pr2_detect_stall ${catkin_LIBRARIES})
+
+#add_executable(pr2_create_task pr2_create_task.cpp)
+#target_link_libraries(pr2_create_task ${catkin_LIBRARIES})
+
+add_executable(pr2_torso pr2_torso.cpp)
+target_link_libraries(pr2_torso ${catkin_LIBRARIES})
+
+add_executable(pr2_base pr2_base.cpp)
+target_link_libraries(pr2_base ${catkin_LIBRARIES})
+
