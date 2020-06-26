@@ -55,7 +55,7 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	o.header.frame_id= "base_footprint";
 	o.primitive_poses.resize(1);
 	o.primitive_poses[0].position.x = 0.6;
-	o.primitive_poses[0].position.y = 0.0;
+	o.primitive_poses[0].position.y = -0.1;
 	o.primitive_poses[0].position.z = 0.75+(0.40/2);
 	o.primitive_poses[0].orientation.x =0.0;
 	o.primitive_poses[0].orientation.y =0.0;
@@ -68,6 +68,25 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	o.primitives[0].dimensions[1]= 0.05;
 	o.primitives[0].dimensions[2]= 0.40;
 	psi.applyCollisionObject(o);
+
+	o.id= "obstacle2";
+	o.header.frame_id= "base_footprint";
+	o.primitive_poses.resize(1);
+	o.primitive_poses[0].position.x = 0.6;
+	o.primitive_poses[0].position.y = -0.3;
+	o.primitive_poses[0].position.z = 0.75+(0.40/2);
+	o.primitive_poses[0].orientation.x =0.0;
+	o.primitive_poses[0].orientation.y =0.0;
+	o.primitive_poses[0].orientation.z =0.0;
+	o.primitive_poses[0].orientation.w =1.0;
+	o.primitives.resize(1);
+	o.primitives[0].type= shape_msgs::SolidPrimitive::BOX;
+	o.primitives[0].dimensions.resize(3);
+	o.primitives[0].dimensions[0]= 0.05;
+	o.primitives[0].dimensions[1]= 0.05;
+	o.primitives[0].dimensions[2]= 0.40;
+	psi.applyCollisionObject(o);
+
 
 	moveit_msgs::CollisionObject table;
 	table.id= "tableLaas";
@@ -123,7 +142,7 @@ void planTest(Task &t) {
 		grasp_generator->setProperty("object", std::string("object"));
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		Eigen::Affine3d tr = Eigen::Affine3d::Identity();
+		Eigen::Isometry3d tr = Eigen::Isometry3d::Identity();
 		//tr.translation() = Eigen::Vector3d(0.0,0.0,0.0);
 		grasp->setIKFrame(tr, "l_gripper_tool_frame");
 		grasp->setMaxIKSolutions(10);
@@ -162,7 +181,7 @@ void planTest(Task &t) {
 		p.header.frame_id= "base_footprint";
 		p.pose.position.x=  0.6;
 		p.pose.position.y=  -0.2;
-		p.pose.position.z=  0.75+(0.23/2)+0.05;
+		p.pose.position.z=  0.75+(0.23/2)+0.01;
 		stage->setPose(p);
 		stage->setObject("object");
 		stage->setProperty("eef", "left_gripper");
@@ -177,16 +196,50 @@ void planTest(Task &t) {
 		stage->setMonitoredStage(current_state);
 
 		auto wrapper = std::make_unique<stages::ComputeIK>("place pose kinematics", std::move(stage));
-		wrapper->setMaxIKSolutions(32);
-		wrapper->setIKFrame(Eigen::Affine3d::Identity(),"l_gripper_tool_frame");
+		wrapper->setMaxIKSolutions(10);
+		wrapper->setIKFrame(Eigen::Isometry3d::Identity(),"l_gripper_tool_frame");
 		wrapper->setProperty("eef", "left_gripper");
 		wrapper->setProperty("group","left_arm");
 		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
 		t.add(std::move(wrapper));
 	}
 
+
+	{
+		auto stage = std::make_unique<stages::MoveTo>("open left hand", pipeline);
+		stage->setProperty("eef", "left_gripper");
+		stage->setProperty("group", "left_gripper");
+		stage->setGoal("left_open");
+		t.add(std::move(stage));
+	}
+
+	/******************************************************
+---- *          Detach Object                             *
+	 *****************************************************/
+	{
+		auto stage = std::make_unique<stages::ModifyPlanningScene>("detach object");
+		stage->detachObject("object", "l_gripper_tool_frame");
+		t.add(std::move(stage));
+	}
+
+	/******************************************************
+---- *          Retreat Motion                            *
+	 *****************************************************/
+	{
+		auto stage = std::make_unique<stages::MoveRelative>("retreat after place", pipeline);
+		stage->setProperty("group", "left_arm");
+		stage->setProperty("eef", "left_gripper");
+		stage->setMinMaxDistance(.01, .05);
+		stage->setIKFrame(Eigen::Isometry3d::Identity(),"l_gripper_tool_frame");
+		geometry_msgs::Vector3Stamped vec;
+		vec.header.frame_id = "l_gripper_tool_frame";
+		vec.vector.x = -1.0;
+		stage->setDirection(vec);
+	  t.add(std::move(stage));
+	}
+
   std::cerr << t << std::endl;
-	t.plan(10);
+	t.plan(2);
 }
 
 void execute(Task &t)
@@ -210,66 +263,6 @@ void execute(Task &t)
 
 }
 
-void markerCallback(const visualization_msgs::MarkerConstPtr& marker, moveit::planning_interface::PlanningSceneInterface& plan_scene,std::vector<moveit_msgs::CollisionObject>& collision_object_vector)
-{
-  // Add table as a fixed collision object.
-  moveit_msgs::CollisionObject collisionObj;
-  collisionObj.id = marker->text;
-
-  collisionObj.header.frame_id = "base_footprint";
-  shape_msgs::SolidPrimitive collisionObj_primitive;
-
-  // Check the type of the marker. We search for CUBE and CYCLINDER only
-  if(marker->type == visualization_msgs::Marker::CUBE)
-  {
-    collisionObj_primitive.type = collisionObj_primitive.BOX;
-    collisionObj_primitive.dimensions.resize(3);
-    collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::BOX_X] = marker->scale.x;
-    collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::BOX_Y] = marker->scale.y;
-    collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::BOX_Z] = marker->scale.z;
-  }
-  else if(marker->type == visualization_msgs::Marker::CYLINDER)
-  {
-    collisionObj_primitive.type = collisionObj_primitive.CYLINDER;
-    collisionObj_primitive.dimensions.resize(2);
-    collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::CYLINDER_RADIUS] =marker->scale.y /2.0;
-    collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::CYLINDER_HEIGHT] = marker->scale.z;
-
-
-    std::cout << "Object Size is :" << std::endl;
-    std::cout << "Radius :" << marker->scale.x/2.0 << std::endl;
-    std::cout << "Height :" <<  marker->scale.z << std::endl;
-  }
-  else
-  {
-    return;
-  }
-
-  // Define a pose for the object (specified relative to frame_id)
-  geometry_msgs::Pose collisionObj_pose;
-  collisionObj_pose.position.x = marker->pose.position.x;
-  collisionObj_pose.position.y = marker->pose.position.y;
-  collisionObj_pose.position.z = marker->pose.position.z;
-
-  collisionObj_pose.orientation.x = marker->pose.orientation.x;
-  collisionObj_pose.orientation.y = marker->pose.orientation.y;
-  collisionObj_pose.orientation.z = marker->pose.orientation.z;
-  collisionObj_pose.orientation.w = marker->pose.orientation.w;
-
-  collisionObj.primitives.push_back(collisionObj_primitive);
-  collisionObj.primitive_poses.push_back(collisionObj_pose);
-  collisionObj.operation = collisionObj.ADD;
-
-  collision_object_vector.push_back(collisionObj);
-
-  // Now, let's add the collision object into the world
-  // Little sleep necessary before adding it
-  ros::Duration(0.2).sleep();
-  // Add the remaining collision object
-  plan_scene.addCollisionObjects(collision_object_vector);
-}
-
-
 int main(int argc, char** argv){
 	ros::init(argc, argv, "pr2");
 	ros::AsyncSpinner spinner(1);
@@ -286,12 +279,6 @@ int main(int argc, char** argv){
 	std::vector<moveit_msgs::CollisionObject> collision_objects_vector;
 
 	spawnObject(planning_scene_interface);
-
-
-  // Subscribe to topic giving the marker (RoboSherlock) to show the object as boxes in Rviz
-  ros::Subscriber marker_sub = nh.subscribe<visualization_msgs::Marker>("/visualization_marker", 1000, boost::bind(&markerCallback,_1,boost::ref(planning_scene_interface),boost::ref(collision_objects_vector)));
-	ros::Duration(5).sleep();
-	marker_sub.shutdown();
 
 	Task t("myTask");
 	try {
