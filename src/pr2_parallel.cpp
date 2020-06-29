@@ -105,7 +105,7 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 		grasp_generator->setMonitoredStage(initial_stage);
 
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		grasp->setIKFrame(Eigen::Affine3d::Identity(), tool_frame);
+		grasp->setIKFrame(Eigen::Isometry3d::Identity(), tool_frame);
 
 
 		// pick container, using the generated grasp generator

@@ -167,7 +167,7 @@ void planTest(Task &t) {
 		stage->setMonitoredStage(current_state);
 
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(stage));
-		grasp->setIKFrame(Eigen::Affine3d::Identity(), "l_gripper_tool_frame");
+		grasp->setIKFrame(Eigen::Isometry3d::Identity(), "l_gripper_tool_frame");
 		grasp->properties().configureInitFrom(Stage::PARENT);
 		grasp->setMaxIKSolutions(10);
 
@@ -213,7 +213,7 @@ void planTest(Task &t) {
 
 		auto wrapper = std::make_unique<stages::ComputeIK>("place pose kinematics", std::move(stage));
 		wrapper->setMaxIKSolutions(32);
-		wrapper->setIKFrame(Eigen::Affine3d::Identity(),"l_gripper_tool_frame");
+		wrapper->setIKFrame(Eigen::Isometry3d::Identity(),"l_gripper_tool_frame");
 		wrapper->setProperty("eef", "left_gripper");
 		wrapper->setProperty("group","left_arm");
 		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });

@@ -105,7 +105,7 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 		grasp_generator->setMonitoredStage(initial_stage);
 
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		grasp->setIKFrame(Eigen::Affine3d::Identity(), tool_frame);
+		grasp->setIKFrame(Eigen::Isometry3d::Identity(), tool_frame);
 
 
 		// pick container, using the generated grasp generator
@@ -167,7 +167,7 @@ void planTest(Task &t) {
 		grasp_generator->setMonitoredStage(current_state);
 
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		grasp->setIKFrame(Eigen::Affine3d::Identity(), "l_gripper_tool_frame");
+		grasp->setIKFrame(Eigen::Isometry3d::Identity(), "l_gripper_tool_frame");
 		grasp->setMaxIKSolutions(10);
 
 
@@ -233,7 +233,7 @@ void planTest(Task &t) {
 
 		auto wrapper = std::make_unique<stages::ComputeIK>("place pose kinematics", std::move(stage));
 		wrapper->setMaxIKSolutions(32);
-		wrapper->setIKFrame(Eigen::Affine3d::Identity(),"l_gripper_tool_frame");
+		wrapper->setIKFrame(Eigen::Isometry3d::Identity(),"l_gripper_tool_frame");
 		wrapper->setProperty("eef", "left_gripper");
 		wrapper->setProperty("group","left_arm");
 		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
@@ -286,7 +286,7 @@ void planTest(Task &t) {
 		grasp_generator->setProperty("object", std::string("object"));
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		grasp->setIKFrame(Eigen::Affine3d::Identity(), "r_gripper_tool_frame");
+		grasp->setIKFrame(Eigen::Isometry3d::Identity(), "r_gripper_tool_frame");
 		grasp->setMaxIKSolutions(10);
 
 		// pick container, using the generated grasp generator

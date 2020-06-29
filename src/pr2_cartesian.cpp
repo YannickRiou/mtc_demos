@@ -163,7 +163,7 @@ void planTest(Task &t) {
 			auto wrapper = std::make_unique<stages::ComputeIK>("grasp pose IK", std::move(stage));
 			wrapper->setMaxIKSolutions(8);
 			wrapper->setMinSolutionDistance(1.0);
-			wrapper->setIKFrame(Eigen::Affine3d::Identity(), "l_gripper_tool_frame");
+			wrapper->setIKFrame(Eigen::Isometry3d::Identity(), "l_gripper_tool_frame");
 			wrapper->properties().configureInitFrom(Stage::PARENT, { "eef", "group" });
 			wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
 			t.add(std::move(wrapper));

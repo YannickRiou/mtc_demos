@@ -108,7 +108,7 @@ void planTest(Task &t) {
 		grasp_generator->setProperty("object", std::string("bar"));
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		Eigen::Affine3d tr = Eigen::Affine3d::Identity();
+		Eigen::Isometry3d tr = Eigen::Isometry3d::Identity();
 		//tr.translation() = Eigen::Vector3d(0.0,0.0,0.0);
 		grasp->setIKFrame(tr, "l_gripper_tool_frame");
 		grasp->setMaxIKSolutions(100);
@@ -155,7 +155,7 @@ void planTest(Task &t) {
 
 		auto wrapper = std::make_unique<stages::ComputeIK>("to handover", std::move(stage) );
 		wrapper->setMaxIKSolutions(32);
-		wrapper->setIKFrame(Eigen::Affine3d::Identity(),"l_gripper_tool_frame");
+		wrapper->setIKFrame(Eigen::Isometry3d::Identity(),"l_gripper_tool_frame");
 		wrapper->setProperty("group","left_arm");
 		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
 		t.add(std::move(wrapper));
@@ -187,8 +187,8 @@ void planTest(Task &t) {
 		grasp_generator->setProperty("object", std::string("bar"));
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
-		//grasp->setIKFrame(Eigen::Affine3d::Identity(), "r_gripper_tool_frame");
-	  Eigen::Affine3d tr = Eigen::Affine3d::Identity();
+		//grasp->setIKFrame(Eigen::Isometry3d::Identity(), "r_gripper_tool_frame");
+	  Eigen::Isometry3d tr = Eigen::Isometry3d::Identity();
 		tr.translation() = Eigen::Vector3d(0.0,0.0,-0.1);
 		grasp->setIKFrame(tr, "r_gripper_tool_frame");
 		grasp->setMaxIKSolutions(100);
