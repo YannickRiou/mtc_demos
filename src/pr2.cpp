@@ -122,7 +122,7 @@ void planTest(Task &t) {
 
 	// planner used for connect
 	auto pipeline = std::make_shared<solvers::PipelinePlanner>();
-	pipeline->setPlannerId("RRTConnectkConfigDefault");
+	pipeline->setPlannerId("RRT");
 
 	{
 		// connect to pick
@@ -247,6 +247,7 @@ void execute(Task &t)
 
 	if(t.solutions().size() > 0)
 	{
+
 		actionlib::SimpleActionClient<moveit_task_constructor_msgs::ExecuteTaskSolutionAction> ac("execute_task_solution", true);
 		ac.waitForServer();
 		ROS_INFO("Executing solution trajectory");
@@ -259,6 +260,7 @@ void execute(Task &t)
 		if (execute_result.val != moveit_msgs::MoveItErrorCodes::SUCCESS) {
 			ROS_ERROR_STREAM("Task execution failed and returned: " << ac.getState().toString());
 		}
+
 	}
 
 }

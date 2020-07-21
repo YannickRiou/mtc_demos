@@ -33,7 +33,7 @@ using namespace moveit::task_constructor;
 
 void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 
-	moveit_msgs::CollisionObject o;
+	/*moveit_msgs::CollisionObject o;
 	o.id= "bar";
 	o.header.frame_id= "base_footprint";
 	o.primitive_poses.resize(1);
@@ -50,13 +50,13 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	o.primitives[0].dimensions[0]= 0.05;
 	o.primitives[0].dimensions[1]= 0.05;
 	o.primitives[0].dimensions[2]= 0.30;
-	psi.applyCollisionObject(o);
+	psi.applyCollisionObject(o);*/
 
 	moveit_msgs::CollisionObject table;
 	table.id= "tableLaas";
 	table.header.frame_id= "base_footprint";
 	table.primitive_poses.resize(1);
-	table.primitive_poses[0].position.x = 0.95;
+	table.primitive_poses[0].position.x = 0.93;
 	table.primitive_poses[0].position.y = 0.0;
 	table.primitive_poses[0].position.z = 0.75/2;
 	table.primitive_poses[0].orientation.x =0.0;
@@ -71,6 +71,8 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& psi) {
 	table.primitives[0].dimensions[2]= 0.75;
 	psi.applyCollisionObject(table);
 }
+
+#define OBJ "obj_5"
 
 void planTest(Task &t) {
 
@@ -105,11 +107,11 @@ void planTest(Task &t) {
 		//grasp_generator->setTopGraspEnable(true);
 		grasp_generator->setPreGraspPose("left_open");
 		grasp_generator->setGraspPose("left_close");
-		grasp_generator->setProperty("object", std::string("bar"));
+		grasp_generator->setProperty("object", OBJ);
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
 		Eigen::Isometry3d tr = Eigen::Isometry3d::Identity();
-		//tr.translation() = Eigen::Vector3d(0.0,0.0,0.0);
+		tr.translation() = Eigen::Vector3d(0.0,0.0,-0.07);
 		grasp->setIKFrame(tr, "l_gripper_tool_frame");
 		grasp->setMaxIKSolutions(100);
 
@@ -117,7 +119,7 @@ void planTest(Task &t) {
 		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
 		pick->setProperty("eef", "left_gripper");
 		pick->setProperty("group","left_arm");
-		pick->setProperty("object", std::string("bar"));
+		pick->setProperty("object",OBJ);
 		geometry_msgs::TwistStamped approach;
 		approach.header.frame_id = "l_gripper_tool_frame";
 		approach.twist.linear.x = 1.0;
@@ -164,7 +166,7 @@ void planTest(Task &t) {
 
 	 {
 		auto stage = std::make_unique<stages::ModifyPlanningScene>("Detach object");
-		stage->detachObject("bar", "l_gripper_tool_frame");
+		stage->detachObject(OBJ, "l_gripper_tool_frame");
 		current_state = stage.get();
 		t.add(std::move(stage));
 	}
@@ -184,12 +186,12 @@ void planTest(Task &t) {
 		grasp_generator->setAngleDelta(90);
 		grasp_generator->setPreGraspPose("right_open");
 		grasp_generator->setGraspPose("right_close");
-		grasp_generator->setProperty("object", std::string("bar"));
+		grasp_generator->setProperty("object", OBJ);
 		grasp_generator->setMonitoredStage(current_state);
 		auto grasp = std::make_unique<stages::SimpleGrasp>(std::move(grasp_generator));
 		//grasp->setIKFrame(Eigen::Isometry3d::Identity(), "r_gripper_tool_frame");
 	  Eigen::Isometry3d tr = Eigen::Isometry3d::Identity();
-		tr.translation() = Eigen::Vector3d(0.0,0.0,-0.1);
+		tr.translation() = Eigen::Vector3d(0.0,0.0,0.07);
 		grasp->setIKFrame(tr, "r_gripper_tool_frame");
 		grasp->setMaxIKSolutions(100);
 
@@ -197,7 +199,7 @@ void planTest(Task &t) {
 		auto pick = std::make_unique<stages::Pick>(std::move(grasp));
 		pick->setProperty("eef", "right_gripper");
 		pick->setProperty("group","right_arm");
-		pick->setProperty("object", std::string("bar"));
+		pick->setProperty("object", OBJ);
 		geometry_msgs::TwistStamped approach;
 		approach.header.frame_id = "r_gripper_tool_frame";
 		approach.twist.linear.x = 1.0;
@@ -220,7 +222,7 @@ void planTest(Task &t) {
 		stage->setGoal("left_open");
 		t.add(std::move(stage));
 	}
-
+  /*
 	{
 		auto stage = std::make_unique<stages::MoveTo>("move to home right", cartesian);
 		stage->setProperty("group", "right_arm");
@@ -228,7 +230,7 @@ void planTest(Task &t) {
 		stage->setGoal("RIGHT_ARM_INITIAL_POSE");
 		t.add(std::move(stage));
 	}
-
+  */
 
   std::cerr << t << std::endl;
 	t.plan(10);
@@ -283,6 +285,7 @@ void markerCallback(const visualization_msgs::MarkerConstPtr& marker, moveit::pl
     collisionObj_primitive.dimensions[shape_msgs::SolidPrimitive::CYLINDER_HEIGHT] = marker->scale.z;
 
 
+		std::cout << "Object name is :" << collisionObj.id << std::endl;
     std::cout << "Object Size is :" << std::endl;
     std::cout << "Radius :" << marker->scale.x/2.0 << std::endl;
     std::cout << "Height :" <<  marker->scale.z << std::endl;
@@ -351,7 +354,7 @@ int main(int argc, char** argv){
 		return EINVAL;
 	}
 
-	execute(t);
+	//execute(t);
 
 	return 0;
 }

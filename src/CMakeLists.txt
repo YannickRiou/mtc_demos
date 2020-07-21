@@ -38,3 +38,6 @@ target_link_libraries(pr2_torso ${catkin_LIBRARIES})
 add_executable(pr2_base pr2_base.cpp)
 target_link_libraries(pr2_base ${catkin_LIBRARIES})
 
+add_executable(pr2_gripper pr2_gripper.cpp)
+target_link_libraries(pr2_gripper ${catkin_LIBRARIES})
+
