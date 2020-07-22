@@ -139,6 +139,53 @@ void createPlaceTask(Task &placeTask, const solvers::PipelinePlannerPtr& pipelin
 	}
 }
 
+void createMoveTask(Task &moveTask,const solvers::PipelinePlannerPtr& pipeline, const solvers::CartesianPathPtr& cartesian,const moveit::core::RobotModelPtr& robotModel,const std::string planGroup, const geometry_msgs::PoseStamped moveToPose)
+{
+	moveTask.setRobotModel(robotModel);
+	std::string ikFrame;
+		std::string eef;
+	if(planGroup == "left_arm")
+	{
+		ikFrame = "l_gripper_tool_frame";
+		eef = "left_gripper";
+	}
+	else if(planGroup == "right_arm")
+	{
+		ikFrame = "r_gripper_tool_frame";
+		eef = "right_gripper";
+	}
+
+	//Start state
+	Stage* current_state = nullptr;
+	auto initial = std::make_unique<stages::CurrentState>("current state");
+	current_state = initial.get();
+	moveTask.add(std::move(initial));
+
+	{
+		// connect
+		stages::Connect::GroupPlannerVector planners = {{planGroup, pipeline},{eef, pipeline}};
+		auto connect = std::make_unique<stages::Connect>("connect", planners);
+		connect->properties().configureInitFrom(Stage::PARENT);
+		moveTask.add(std::move(connect));
+	}
+
+	{
+		auto stage = std::make_unique<stages::GeneratePose>("go to pose");
+		stage->setProperty("group",planGroup);
+		stage->setProperty("eef",eef);
+		stage->setPose(moveToPose);
+		stage->setMonitoredStage(current_state);
+
+		auto wrapper = std::make_unique<stages::ComputeIK>("pose IK", std::move(stage) );
+		wrapper->setMaxIKSolutions(32);
+		wrapper->setIKFrame(ikFrame);
+		wrapper->setProperty("group",planGroup);
+		wrapper->setProperty("eef",eef);
+		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
+		moveTask.add(std::move(wrapper));
+	}
+}
+
 void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipeline, const solvers::CartesianPathPtr& cartesian,const moveit::core::RobotModelPtr& robotModel,const std::string planGroup,const std::string object, const geometry_msgs::PoseStamped graspPose)
 {
 	pickTask.setRobotModel(robotModel);
@@ -191,7 +238,7 @@ void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipe
 		// connect to pick
 		stages::Connect::GroupPlannerVector planners = {{planGroup, pipeline}};
 		auto connect = std::make_unique<stages::Connect>("connect", planners);
-		connect->setTimeout(5.0);
+		connect->setTimeout(20.0);
 		connect->properties().configureInitFrom(Stage::PARENT);
 		pickTask.add(std::move(connect));
 	}
@@ -205,12 +252,12 @@ void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipe
 		{
 			auto stage = std::make_unique<stages::MoveRelative>("approach object", cartesian);
 			stage->properties().configureInitFrom(Stage::PARENT, { "group" });
-			stage->setMinMaxDistance(0.01, 0.05);
+			stage->setMinMaxDistance(0.01, 0.15);
 			stage->setIKFrame(ikFrame);
 			// Set upward direction
 			geometry_msgs::Vector3Stamped vec;
 			vec.header.frame_id = object;
-			vec.vector.x = 1.0;
+			vec.vector.z = -1.0;
 			stage->setDirection(vec);
 			grasp->insert(std::move(stage));
 		}
@@ -229,26 +276,7 @@ void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipe
 			grasp->insert(std::move(wrapper));
 		}
 
-		/*{
-		// Sample grasp pose
-		auto stage = std::make_unique<stages::GenerateGraspPose>("generate grasp pose");
-		stage->properties().configureInitFrom(Stage::PARENT);
-		stage->setPreGraspPose("left_open");
-		stage->setObject(object);
-		stage->setAngleDelta(M_PI / 2);
-		stage->setMonitoredStage(current_state);  // Hook into current state
-
-		// Compute IK
-		auto wrapper = std::make_unique<stages::ComputeIK>("grasp pose IK", std::move(stage));
-		wrapper->setMaxIKSolutions(8);
-		wrapper->setMinSolutionDistance(1.0);
-		wrapper->setIKFrame(Eigen::Isometry3d::Identity(), ikFrame);
-		wrapper->properties().configureInitFrom(Stage::PARENT, { "eef", "group" });
-		wrapper->properties().configureInitFrom(Stage::INTERFACE, { "target_pose" });
-		grasp->insert(std::move(wrapper));
-	}*/
-
-				// ---------------------- Allow Collision (hand object) ---------------------- //
+		// ---------------------- Allow Collision (hand object) ---------------------- //
 		{
 			auto stage = std::make_unique<stages::ModifyPlanningScene>("allow collision (hand,object)");
 			stage->allowCollisions(object, pickTask.getRobotModel()->getJointModelGroup(eef)->getLinkModelNamesWithCollisionGeometry(),true);
@@ -273,7 +301,7 @@ void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipe
 			// ---------------------- Allow collision (object support) ---------------------- //
 		{
 			auto stage = std::make_unique<stages::ModifyPlanningScene>("allow collision (object,support)");
-			stage->allowCollisions({ object }, "tableLaas", true);
+			stage->allowCollisions({ object }, {"tableLaas","boite"}, true);
 			grasp->insert(std::move(stage));
 		}
 
@@ -281,12 +309,12 @@ void createPickTaskCustom(Task &pickTask,const solvers::PipelinePlannerPtr& pipe
 		{
 			auto stage = std::make_unique<stages::MoveRelative>("lift object", cartesian);
 			stage->properties().configureInitFrom(Stage::PARENT, { "group" });
-			stage->setMinMaxDistance(0.01, 0.1);
+			stage->setMinMaxDistance(0.01, 0.20);
 			stage->setIKFrame(ikFrame);
 			// Set upward direction
 			geometry_msgs::Vector3Stamped vec;
 			vec.header.frame_id = "base_footprint";
-			vec.vector.z = 1.0;
+			vec.vector.x = -1.0;
 			stage->setDirection(vec);
 			grasp->insert(std::move(stage));
 		}
@@ -555,7 +583,7 @@ void markerCallback(const visualization_msgs::MarkerConstPtr& marker, moveit::pl
 	if(marker->ns == "main_shapes")
 	{
 
-		/*if(marker->id == 54)
+		if(marker->id == 54)
 		{
 			collisionObj.id = "tableLaas";
 
@@ -567,62 +595,53 @@ void markerCallback(const visualization_msgs::MarkerConstPtr& marker, moveit::pl
 			collisionObj.meshes.push_back(mesh);
 
 			// Define a pose for the object (specified relative to frame_id)
-			colliObjPoseUntransformed.pose.position.x = marker->pose.position.x;
-		 	colliObjPoseUntransformed.pose.position.y = marker->pose.position.y;
-		  	colliObjPoseUntransformed.pose.position.z = marker->pose.position.z;
-
-			colliObjPoseUntransformed.pose.orientation.x = marker->pose.orientation.x;
-			colliObjPoseUntransformed.pose.orientation.y = marker->pose.orientation.y;
-			colliObjPoseUntransformed.pose.orientation.z = marker->pose.orientation.z;
-			colliObjPoseUntransformed.pose.orientation.w = marker->pose.orientation.w;
+			colliObjPoseUntransformed.pose = marker->pose;
 
 			tf2::doTransform(colliObjPoseUntransformed,colliObjPosetransformed,transform);
 
-			collisionObj_pose.position.x = colliObjPosetransformed.pose.position.x;
-			collisionObj_pose.position.y = colliObjPosetransformed.pose.position.y;
-			collisionObj_pose.position.z = colliObjPosetransformed.pose.position.z-(0.75/2);
-
-			collisionObj_pose.orientation.x = 0;
-			collisionObj_pose.orientation.y = 0;
-			collisionObj_pose.orientation.z = colliObjPosetransformed.pose.orientation.z;
-			collisionObj_pose.orientation.w = colliObjPosetransformed.pose.orientation.w;
-		}
-		else*/
-
-		// Define a pose for the object (specified relative to frame_id)
-		colliObjPoseUntransformed.pose = marker->pose;
-
-		tf2::doTransform(colliObjPoseUntransformed,colliObjPosetransformed,transform);
-
-		collisionObj_pose = colliObjPosetransformed.pose;
-
-		if(marker->id == 33)
-		{
-			collisionObj.id = "boite";
-
-			std::string mesh_uri("package://mtc_demos/meshes/director_box.dae");
-			m = shapes::createMeshFromResource(mesh_uri);
-			shapes::constructMsgFromShape(m, mesh_msg);
-			mesh = boost::get<shape_msgs::Mesh>(mesh_msg);
-			// Add the mesh to the Collision object message
-			collisionObj.meshes.push_back(mesh);
-
-			collisionObj_pose.orientation.z = 0.707;
-			collisionObj_pose.orientation.w = 0.707;
+			collisionObj_pose = colliObjPosetransformed.pose;
+			collisionObj_pose.position.z = collisionObj_pose.position.z - 0.75;
 
 			collisionObj.mesh_poses.push_back(collisionObj_pose);
 		}
-		else if(marker->id == 206)
+		else
 		{
-			collisionObj.id = "obj";
-			collisionObj_primitive.type = collisionObj_primitive.BOX;
-	    collisionObj_primitive.dimensions.resize(3);
-	    collisionObj_primitive.dimensions[0] = 0.055;
-			collisionObj_primitive.dimensions[1] = 0.055*2;
-			collisionObj_primitive.dimensions[2] = 0.055;
 
-			collisionObj.primitives.push_back(collisionObj_primitive);
-			collisionObj.primitive_poses.push_back(collisionObj_pose);
+			// Define a pose for the object (specified relative to frame_id)
+			colliObjPoseUntransformed.pose = marker->pose;
+
+			tf2::doTransform(colliObjPoseUntransformed,colliObjPosetransformed,transform);
+
+			collisionObj_pose = colliObjPosetransformed.pose;
+
+			if(marker->id == 33)
+			{
+				collisionObj.id = "boite";
+
+				std::string mesh_uri("package://mtc_demos/meshes/director_box.dae");
+				m = shapes::createMeshFromResource(mesh_uri);
+				shapes::constructMsgFromShape(m, mesh_msg);
+				mesh = boost::get<shape_msgs::Mesh>(mesh_msg);
+				// Add the mesh to the Collision object message
+				collisionObj.meshes.push_back(mesh);
+
+				collisionObj_pose.orientation.z = 0.707;
+				collisionObj_pose.orientation.w = 0.707;
+
+				collisionObj.mesh_poses.push_back(collisionObj_pose);
+			}
+			else if(marker->id == 206)
+			{
+				collisionObj.id = "obj";
+				collisionObj_primitive.type = collisionObj_primitive.BOX;
+		    collisionObj_primitive.dimensions.resize(3);
+		    collisionObj_primitive.dimensions[0] = 0.055;
+				collisionObj_primitive.dimensions[1] = 0.055*2;
+				collisionObj_primitive.dimensions[2] = 0.055;
+
+				collisionObj.primitives.push_back(collisionObj_primitive);
+				collisionObj.primitive_poses.push_back(collisionObj_pose);
+			}
 		}
 	}
 	// OBJ is a primitive shape (box or cylinder)
@@ -710,8 +729,12 @@ int main(int argc, char** argv){
 	std::string left_obj;
 	std::string right_obj;
 
+	std::string choosedPlanner;
+
 	nh.getParam("left", left_obj);
   nh.getParam("right", right_obj);
+	nh.getParam("planner", choosedPlanner);
+
 	char ch;
 
 	const std::string RIGHT_GRIPPER_PLANNING_GROUP = "right_gripper";
@@ -807,17 +830,27 @@ int main(int argc, char** argv){
 
 	// planner used for connect
 	auto pipeline = std::make_shared<solvers::PipelinePlanner>();
-	pipeline->setPlannerId("TRRT");
+	pipeline->setPlannerId(choosedPlanner);
 
 	geometry_msgs::PoseStamped graspPose_left;
 	graspPose_left.header.frame_id = left_obj;
-	graspPose_left.pose.position.x = -0.01;
+	graspPose_left.pose.position.x = 0.00;
 	graspPose_left.pose.position.y = 0.0;
 	graspPose_left.pose.position.z = 0.02;
-	graspPose_left.pose.orientation.x = 0.0;
-	graspPose_left.pose.orientation.y = 0.0;
-	graspPose_left.pose.orientation.z = 0.0;
-	graspPose_left.pose.orientation.w = 1.0;
+	graspPose_left.pose.orientation.x = 0.500;
+	graspPose_left.pose.orientation.y = 0.500;
+	graspPose_left.pose.orientation.z = -0.500;
+	graspPose_left.pose.orientation.w = 0.500;
+
+	geometry_msgs::PoseStamped movePose_left;
+	movePose_left.header.frame_id = left_obj;
+	movePose_left.pose.position.x = 0.00;
+	movePose_left.pose.position.y = 0.0;
+	movePose_left.pose.position.z = 0.2;
+	movePose_left.pose.orientation.x = 0.500;
+	movePose_left.pose.orientation.y = 0.500;
+	movePose_left.pose.orientation.z = -0.500;
+	movePose_left.pose.orientation.w = 0.500;
 
 	geometry_msgs::PoseStamped graspPose_right;
 	graspPose_right.header.frame_id = right_obj;
@@ -853,40 +886,55 @@ int main(int argc, char** argv){
 
 	//createPickTaskCustom(t,"left_arm","obj_2",graspPose);
   //createPickTask(t,pipeline,cartesian,kinematic_model,"left_arm","obj_0");
-
+	Task moveLeft("moveLeft");
 	Task pick_left("pick_left");
 	Task pick_right("pick_right");
 	Task place_left("place_left");
 	Task place_right("place_right");
 
 
-/*
+
 	try {
 		//planTest(pick,pipeline,cartesian,kinematic_model);
 		//createPickTask(pick_left,pipeline,cartesian,kinematic_model,"left_arm",left_obj);
 		//createPickTask(pick_right,pipeline,cartesian,kinematic_model,"right_arm",right_obj);
 
+		//createPickTaskCustom(pick_left,pipeline, cartesian,kinematic_model,"left_arm",left_obj, graspPose_left);
+		//createPickTaskCustom(pick_right,pipeline, cartesian,kinematic_model,"right_arm",right_obj, graspPose_right);
+
+		//createPlaceTask(place_left,pipeline,cartesian,kinematic_model,"left_arm",left_obj,placePose_left);
+		//createPlaceTask(place_right,pipeline,cartesian,kinematic_model,"right_arm",right_obj,placePose_right);
+		createMoveTask(moveLeft,pipeline, cartesian,kinematic_model,"left_arm", movePose_left);
 		createPickTaskCustom(pick_left,pipeline, cartesian,kinematic_model,"left_arm",left_obj, graspPose_left);
-		createPickTaskCustom(pick_right,pipeline, cartesian,kinematic_model,"right_arm",right_obj, graspPose_right);
 
-		createPlaceTask(place_left,pipeline,cartesian,kinematic_model,"left_arm",left_obj,placePose_left);
-		createPlaceTask(place_right,pipeline,cartesian,kinematic_model,"right_arm",right_obj,placePose_right);
-
-		pick_left.plan(10);
-		execute(pick_left);
-
-		pick_right.plan(10);
-		execute(pick_right);
-
+		moveLeft.plan(5);
 
 		std::cout << "waiting for any key + <enter>\n";
 		std::cin >> ch;
 
-		place_left.plan(10);
-		execute(place_left);
+		if(ch != 'q')
+		{
+			execute(moveLeft);
+		}
 
-		place_right.plan(10);
-		execute(place_right);
+		pick_left.plan(5);
+
+		if(ch != 'q')
+		{
+			execute(pick_left);
+		}
+		//
+		// pick_right.plan(10);
+		// execute(pick_right);
+		//
+		//
+
+		//
+		// place_left.plan(10);
+		// execute(place_left);
+		//
+		// place_right.plan(10);
+		// execute(place_right);
 	}
 	catch (const InitStageException& e)
 	{
@@ -906,7 +954,7 @@ int main(int argc, char** argv){
 		// 	}
 		// 	r.sleep();
 		// }
-	}*/
+	}
 
 	while(ros::ok());
 
